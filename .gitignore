@@ -3,5 +3,5 @@
 # Except
 !.gitignore
 !semantic_analysis_multiprocess.py
-!Semantic_analysis/country_term_dict.pickle
-!Semantic_analysis/FLICKR_SUNSET_country_cosine_similarities.csv
+!*Semantic_analysis/country_term_dict.pickle
+!*Semantic_analysis/FLICKR_SUNSET_country_cosine_similarities.csv

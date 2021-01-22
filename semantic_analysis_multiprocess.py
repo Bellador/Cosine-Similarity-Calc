@@ -91,13 +91,13 @@ def calc_vocabulary():
     return country_term_dict, corpus_vocabulary_set, corpus_vocabulary_set_len, country_codes, countries_cosine_similarity_df
 
 
-def calc_term_vector(country_term_dict, corpus_vocabulary_set, corpus_vocabulary_set_len, country_codes):
+def calc_term_vector(country_term_dict, corpus_vocabulary_set, corpus_vocabulary_set_len, country_codes, tracker=1):
     # create dict that holds the terms_VECTORES for all post
     country_vector_dict = {}
     # create the vector of all posts based on the overall corpus vocabulary
     print('calculating term vectors...')
     for index, country_code in enumerate(country_codes, 1):
-        print(f'progress: {index} of {len(country_codes)}\n')
+        print(f'Process {tracker}: {index} of {len(country_codes)}\n')
         country_terms_counter = country_term_dict[country_code]
         # create a blueprint country_vector with the length of the entire corpus vocabulary and default value of 0
         country_vector = [0] * corpus_vocabulary_set_len
@@ -158,12 +158,14 @@ if __name__ == '__main__':
     arguments = []
     # prepare arguments for processes
     for i in range(cpu_count()):
+        # number to track process in print statements
+        tracker = i + 1
         # if last process take the remaining rest
         if i == (cpu_count()-1):
             country_codes_process_share = country_codes[(i * nr_country_codes_per_process):]
         else:
             country_codes_process_share = country_codes[(i*nr_country_codes_per_process):((i+1)*nr_country_codes_per_process)]
-        arguments.append((country_term_dict, corpus_vocabulary_set, corpus_vocabulary_set_len, country_codes_process_share))
+        arguments.append((country_term_dict, corpus_vocabulary_set, corpus_vocabulary_set_len, country_codes_process_share, tracker))
     # convert to tuple
     arguments = tuple(arguments)
     with Pool() as pool:

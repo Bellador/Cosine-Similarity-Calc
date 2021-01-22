@@ -4,5 +4,8 @@
 !.gitignore
 !README.md
 !semantic_analysis_multiprocess.py
+!tagmaps.py
 !Semantic_analysis
 !Semantic_analysis/FLICKR_SUNSET_country_cosine_similarities.csv
+!Semantic_analysis/FLICKR_SUNSET_country_tf_idf_based_on_all_sunset_posts_df.csv
+!Semantic_analysis/unique_userdays_per_country.txt

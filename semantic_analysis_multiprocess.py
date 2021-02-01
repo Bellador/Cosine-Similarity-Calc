@@ -20,6 +20,15 @@ PROCESSING STEPS (do everything for flickr sunset first - testing)
 # define which phenomenon is analysed
 MODE = 'SUNSET' #OR SUNRISE
 SOURCE = 'FLICKR' # OR INSTAGRAM OR ALL
+# min. amount of unique userposts a country must have to be included in the processing
+THRESHOLD = 25
+# if location (country code) is already present (true) in flickr dataset the merge with a location dataset can be skipped
+LOCATION_PRESENT = True
+if LOCATION_PRESENT:
+    # define search col where the flickr terms are found
+    term_col = 'user_terms'
+else:
+    term_col = 'userday_terms'
 
 if SOURCE == 'FLICKR':
     # random sample is used to build the entire vocabulary for tf-idf. columns: userday, userday_terms, userday_season_id
@@ -28,11 +37,12 @@ if SOURCE == 'FLICKR':
         # spatial reference to unique userday hashaes. columns: userday, xbin, ybin, su_a3 (country code)
         FLICKR_LOCATIONREF_PATH = Path("./Semantic_analysis/Flickr_userday_location_ref/flickr_sunset_userday_gridloc.csv")
         # actual sunset/sunrise data. columns: userday, userday_terms, userday_season_id (Multiple/Ambiguous 0, Northern spring 1, Northern summer 2, Northern fall 3, Northern winter 4, Southern spring -1, Southern summer -2, Southern fall -3, Southern winter -4
-        FLICKR_PATH = Path("./Semantic_analysis/Flickr_userday_terms_raw/flickr_sunset_terms_geotagged_grouped.csv")
+        # FLICKR_PATH = Path("./Semantic_analysis/Flickr_userday_terms_raw/flickr_sunset_terms_geotagged_grouped.csv")
+        FLICKR_PATH = Path("./Semantic_analysis/2021-01-28_country_userterms/flickr_sunset_terms_user_country.csv") # CHANGE HERE IF NECESSARY
         # cosine similarity store path
-        COSINE_SIMILARITY_STORE_PATH = Path("./Semantic_analysis/FLICKR_SUNSET_country_cosine_similarities.csv")
+        COSINE_SIMILARITY_STORE_PATH = Path("./Semantic_analysis/20210129_FLICKR_SUNSET_country_cosine_similarities.csv") # CHANGE HERE IF NECESSARY
         # STORE PATH FOR INTERMEDIATE PRODUCT - CALCULATED TERMS PER COUNTRY FLICKR POSTS (country_term_dict)
-        COUNTRY_TERM_DICT_STORE_PATH = Path("./Semantic_analysis/FLICKR_SUNSET_country_term_dict.pickle")
+        COUNTRY_TERM_DICT_STORE_PATH = Path("./Semantic_analysis/20210129_FLICKR_SUNSET_country_term_dict.pickle") # CHANGE HERE IF NECESSARY
 
     elif MODE == 'SUNRISE':
         # spatial reference to unique userday hashaes. columns: userday, xbin, ybin, su_a3 (country code)
@@ -55,39 +65,51 @@ def calc_vocabulary():
     # load data, use 'converters={'column_name': eval}' to evaluate the columns to their designated object. Because dataframe
     # was saved as CSV, therefore text, a stored list or series must be converted back otherwise it will appear as string
     flickr_sunset_df = pd.read_csv(FLICKR_PATH)
-    flickr_locationref_sunset_df = pd.read_csv(FLICKR_LOCATIONREF_PATH)
-    # merge dataframes basde on userday hash
-    flickr_sunset_w_locationref_df = flickr_sunset_df.merge(flickr_locationref_sunset_df, how='left', on='userday')
+    if not LOCATION_PRESENT:
+        flickr_locationref_sunset_df = pd.read_csv(FLICKR_LOCATIONREF_PATH)
+        # merge dataframes basde on userday hash
+        flickr_sunset_w_locationref_df = flickr_sunset_df.merge(flickr_locationref_sunset_df, how='left', on='userday')
+    else:
+        flickr_sunset_w_locationref_df = flickr_sunset_df
     # 1.2 retrieve unique country codes for iteration
     country_codes = flickr_sunset_w_locationref_df['su_a3'].unique()
     # remove nan country codes from array (issues with further processing) - index value 17
-    country_codes = np.delete(country_codes, 17)
-    # create dataframe which holds cosine similarities between countries
-    countries_cosine_similarity_df = pd.DataFrame(index=country_codes, columns=country_codes)
+    if not LOCATION_PRESENT:
+        country_codes = np.delete(country_codes, 17)
     # create dict that holds the terms for all posts inside one country based on which cosine similarity will be calcualted
     country_term_dict = {}
     print(f'column dtypes: {flickr_sunset_w_locationref_df.dtypes}')
     print('preprosses userday terms...')
-    flickr_sunset_w_locationref_df['userday_terms'] = flickr_sunset_w_locationref_df['userday_terms'].apply(lambda x: x.strip('{}'))
+    flickr_sunset_w_locationref_df[term_col] = flickr_sunset_w_locationref_df[term_col].apply(lambda x: x.strip('{}'))
     print('build entire corpus vocabulary (set)...')
-    corpus_vocabulary_str = ','.join(flickr_sunset_w_locationref_df['userday_terms'])
+    corpus_vocabulary_str = ','.join(flickr_sunset_w_locationref_df[term_col])
     # convert to set for unique values and then back to access the index function later on
     corpus_vocabulary_set = list(set(corpus_vocabulary_str.split(',')))
     corpus_vocabulary_set_len = len(corpus_vocabulary_set)
     print(f'len corpus vocabulary (set): {corpus_vocabulary_set_len}')
-    print('build vocabulary for all countries...')
+    print(f'build vocabulary for all countries with min. {THRESHOLD} unique userposts...')
     for country_index, country_code in enumerate(country_codes):
         country_df = flickr_sunset_w_locationref_df[flickr_sunset_w_locationref_df['su_a3'] == country_code]
-        # drop duplicates in unique userdays (necessary? should already be unique)
-        # # 1.n calculate unique userdays per country and display
-        print(f'Unique userdays: {country_code}    :      {len(country_df.index.values)}')
-        # build country vocabulary
-        country_vocabulary_str = ','.join(country_df['userday_terms'])
-        country_vocabulary_list = country_vocabulary_str.split(',')
-        # create Counter object for country terms, therefore the count number of each term is acquired
-        country_vocabulary_counter = Counter(country_vocabulary_list)
-        # store in dictionary
-        country_term_dict[country_code] = country_vocabulary_counter
+        # check if len of subdf: country_df is higher than or equal the threhold
+        if len(country_df.index.values) >= THRESHOLD:
+            # # 1.n calculate unique userdays per country and display
+            print(f'Unique userdays: {country_code}    :      {len(country_df.index.values)}')
+            # build country vocabulary
+            country_vocabulary_str = ','.join(country_df[term_col])
+            country_vocabulary_list = country_vocabulary_str.split(',')
+            # create Counter object for country terms, therefore the count number of each term is acquired
+            country_vocabulary_counter = Counter(country_vocabulary_list)
+            # store in dictionary
+            country_term_dict[country_code] = country_vocabulary_counter
+        else:
+            # excluded
+            print(f'Unique userdays: {country_code}    :      {len(country_df.index.values)} - EXCLUDED')
+
+    # create updated country_codes with the ones over the THRESHOLD
+    country_codes = list(country_term_dict.keys())
+    # create dataframe which holds cosine similarities between countries
+    countries_cosine_similarity_df = pd.DataFrame(index=country_codes, columns=country_codes)
+
     return country_term_dict, corpus_vocabulary_set, corpus_vocabulary_set_len, country_codes, countries_cosine_similarity_df
 
 
@@ -95,7 +117,7 @@ def calc_term_vector(country_term_dict, corpus_vocabulary_set, corpus_vocabulary
     # create dict that holds the terms_VECTORES for all post
     country_vector_dict = {}
     # create the vector of all posts based on the overall corpus vocabulary
-    print('calculating term vectors...')
+    print('\ncalculating term vectors...')
     for index, country_code in enumerate(country_codes, 1):
         print(f'Process {tracker}: {index} of {len(country_codes)}\n')
         country_terms_counter = country_term_dict[country_code]

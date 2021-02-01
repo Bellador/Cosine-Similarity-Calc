@@ -23,8 +23,17 @@ Source: https://towardsdatascience.com/tf-idf-for-document-ranking-from-scratch-
 '''
 # define if term frequency is calculated using all available cores
 MULTIPROCESSING = False
-# docuemnt frequency is based on random flickr set instead of only either sunset or sunrise data
+# document frequency is based on random flickr set instead of only either sunset or sunrise data
 BASE_DOCUMENT_FREQUENCY_RANDOM = False
+# min. amount of unique userposts a country must have to be included in the processing
+THRESHOLD = 25
+# if location (country code) is already present (true) in flickr dataset the merge with a location dataset can be skipped
+LOCATION_PRESENT = True
+if LOCATION_PRESENT:
+    # define search col where the flickr terms are found
+    term_col = 'user_terms'
+else:
+    term_col = 'userday_terms'
 # define which phenomenon is analysed
 MODE = 'SUNSET' #OR SUNRISE
 SOURCE = 'FLICKR' # OR INSTAGRAM OR ALL
@@ -38,9 +47,9 @@ if SOURCE == 'FLICKR':
         # spatial reference to unique userday hashaes. columns: userday, xbin, ybin, su_a3 (country code)
         FLICKR_LOCATIONREF_PATH = Path("./Semantic_analysis/Flickr_userday_location_ref/flickr_sunset_userday_gridloc.csv")
         # actual sunset/sunrise data. columns: userday, userday_terms, userday_season_id (Multiple/Ambiguous 0, Northern spring 1, Northern summer 2, Northern fall 3, Northern winter 4, Southern spring -1, Southern summer -2, Southern fall -3, Southern winter -4
-        FLICKR_PATH = Path("./Semantic_analysis/Flickr_userday_terms_raw/flickr_sunset_terms_geotagged_grouped.csv")
+        FLICKR_PATH = Path("./Semantic_analysis/2021-01-28_country_userterms/flickr_sunset_terms_user_country.csv") # CHANGE HERE IF NECESSARY
         # OUTPUT store path
-        TF_IDF_FLICKR_STORE_PATH = Path("./Semantic_analysis/FLICKR_SUNSET_country_tf_idf.csv")
+        TF_IDF_FLICKR_STORE_PATH = Path("./Semantic_analysis/20210201_FLICKR_SUNSET_country_tf_idf.csv") # CHANGE HERE IF NECESSARY
 
     elif MODE == 'SUNRISE':
         # spatial reference to unique userday hashaes. columns: userday, xbin, ybin, su_a3 (country code)
@@ -49,7 +58,6 @@ if SOURCE == 'FLICKR':
         FLICKR_PATH = Path("./Semantic_analysis/Flickr_userday_terms_raw/flickr_sunrise_terms_geotagged_grouped.csv")
         # OUTPUT store path
         TF_IDF_FLICKR_STORE_PATH = Path("./Semantic_analysis/FLICKR_SUNRISE_country_tf_idf.csv")
-
 
 elif SOURCE == 'INSTAGRAM':
     INSTAGRAM_RANDOM1M_PATH = Path("./Semantic_analysis/2020-12-07_FlickrInstagram_random1M/instagram_random1m_terms_geotagged_grouped.csv")
@@ -68,13 +76,18 @@ def load_data():
         return flickr_random_1m_w_locationref_df, country_codes
     else:
         flickr_df = pd.read_csv(FLICKR_PATH, encoding='utf-8')
-        flickr_locationref_df = pd.read_csv(FLICKR_LOCATIONREF_PATH, encoding='utf-8')
-        # merge dataframes basde on userday hash
-        flickr_w_locationref_df = flickr_df.merge(flickr_locationref_df, how='left', on='userday')
+        if not LOCATION_PRESENT:
+            flickr_locationref_df = pd.read_csv(FLICKR_LOCATIONREF_PATH)
+            # merge dataframes basde on userday hash
+            flickr_w_locationref_df = flickr_df.merge(flickr_locationref_df, how='left', on='userday')
+        else:
+            flickr_w_locationref_df = flickr_df
         # 1.2 retrieve unique country codes for iteration
         country_codes = flickr_w_locationref_df['su_a3'].unique()
         # remove nan country codes from array (issues with further processing) - index value 17
-        country_codes = np.delete(country_codes, 17)
+        if not LOCATION_PRESENT:
+            country_codes = np.delete(country_codes, 17)
+
         return flickr_w_locationref_df, country_codes
 
 def text_processing(document_vocabulary):
@@ -93,13 +106,13 @@ def calc_document_frequency(flickr_w_locationref_df):
     2. calculate Counter object over all posts to get document frequency for all terms
     '''
     print('calculating document frequency...')
-    flickr_w_locationref_df['userday_terms'] = flickr_w_locationref_df['userday_terms'].apply(lambda x: x.strip('{}'))
+    flickr_w_locationref_df[term_col] = flickr_w_locationref_df[term_col].apply(lambda x: x.strip('{}'))
     # create set of all term lists
-    flickr_w_locationref_df['userday_terms_set'] = flickr_w_locationref_df['userday_terms'].apply(lambda x: list(set(x.split(','))))
+    flickr_w_locationref_df['userday_terms_set'] = flickr_w_locationref_df[term_col].apply(lambda x: list(set(x.split(','))))
     # !preprocessing for term frequency: add all userday terms to one big list containing also duplicates and not a unique set like for the document frequency
-    flickr_w_locationref_df['userday_terms_list'] = flickr_w_locationref_df['userday_terms'].apply(lambda x: list(x.split(',')))
+    flickr_w_locationref_df['userday_terms_list'] = flickr_w_locationref_df[term_col].apply(lambda x: list(x.split(',')))
     # drop the userday_terms column from dataframe
-    flickr_w_locationref_df.drop(['userday_terms'], axis=1)
+    flickr_w_locationref_df.drop([term_col], axis=1)
     # merge all set lists and create a Counter object on it
     document_vocabulary = flickr_w_locationref_df['userday_terms_set'].explode()
     # clean out text
@@ -118,13 +131,13 @@ def calc_document_frequency_random_posts_per_country(flickr_w_locationref_df):
     2. calculate Counter object over all posts to get document frequency for all terms
     '''
     print('calculating document frequency...')
-    flickr_w_locationref_df['userday_terms'] = flickr_w_locationref_df['userday_terms'].apply(lambda x: x.strip('{}'))
+    flickr_w_locationref_df[term_col] = flickr_w_locationref_df[term_col].apply(lambda x: x.strip('{}'))
     # create set of all term lists
-    flickr_w_locationref_df['userday_terms_set'] = flickr_w_locationref_df['userday_terms'].apply(lambda x: list(set(x.split(','))))
+    flickr_w_locationref_df['userday_terms_set'] = flickr_w_locationref_df[term_col].apply(lambda x: list(set(x.split(','))))
     # !preprocessing for term frequency: add all userday terms to one big list containing also duplicates and not a unique set like for the document frequency
-    flickr_w_locationref_df['userday_terms_list'] = flickr_w_locationref_df['userday_terms'].apply(lambda x: list(x.split(',')))
+    flickr_w_locationref_df['userday_terms_list'] = flickr_w_locationref_df[term_col].apply(lambda x: list(x.split(',')))
     # drop the userday_terms column from dataframe
-    flickr_w_locationref_df.drop(['userday_terms'], axis=1)
+    flickr_w_locationref_df.drop([term_col], axis=1)
     # merge all set lists and create a Counter object on it
     document_vocabulary = flickr_w_locationref_df['userday_terms_set'].explode()
     # clean out text
@@ -145,14 +158,17 @@ def calc_term_frequency(flickr_w_locationref_df, country_codes, tracker=1):
         # # for testing
         # if index == 3:
         #     break
-        print(f'Process {tracker} - calculating term frequency for {country_code}:   {index} of {len(country_codes)}')
         # create sub df that only contains posts of given country code
         country_code_df = flickr_w_locationref_df[flickr_w_locationref_df['su_a3'] == country_code]
-        # merge all set lists and create a Counter object on it
-        country_code_term_vocabulary = country_code_df['userday_terms_list'].explode()
-        # create Counter object --> actual document frequency of every term
-        country_code_term_frequency = Counter(country_code_term_vocabulary)
-        country_term_frequency_dict[country_code] = country_code_term_frequency
+        if len(country_code_df.index.values) >= THRESHOLD:
+            print(f'Process {tracker} - calculating term frequency for {country_code}:   {index} of {len(country_codes)}')
+            # merge all set lists and create a Counter object on it
+            country_code_term_vocabulary = country_code_df['userday_terms_list'].explode()
+            # create Counter object --> actual document frequency of every term
+            country_code_term_frequency = Counter(country_code_term_vocabulary)
+            country_term_frequency_dict[country_code] = country_code_term_frequency
+        else:
+            print(f'Process {tracker} - EXCLUDED {country_code}')
     return country_term_frequency_dict
 
 

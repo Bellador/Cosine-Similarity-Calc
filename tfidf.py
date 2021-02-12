@@ -24,7 +24,8 @@ Source: https://towardsdatascience.com/tf-idf-for-document-ranking-from-scratch-
 # define if term frequency is calculated using all available cores
 MULTIPROCESSING = False
 # document frequency is based on random flickr set instead of only either sunset or sunrise data
-BASE_DOCUMENT_FREQUENCY_RANDOM = False
+BASE_DOCUMENT_FREQUENCY_RANDOM = True
+RANDOM_LOCATION_PRESENT = True # term_col with location data same as the one for the not random dataset (see below)
 # min. amount of unique userposts a country must have to be included in the processing
 THRESHOLD = 25
 # if location (country code) is already present (true) in flickr dataset the merge with a location dataset can be skipped
@@ -41,15 +42,15 @@ TOP_TERMS = 20 # the amount of terms with the highest tf-idf values per country 
 
 if SOURCE == 'FLICKR':
     # random sample is used to build the entire vocabulary for tf-idf. columns: userday, userday_terms, userday_season_id
-    FLICKR_RANDOM1M_PATH = Path("./Semantic_analysis(2020-12-07_FlickrInstagram_random1M/flickr_random1m_terms_geotagged_grouped.csv")
-    FLICKR_RANDOM1M_LOCATIONREF_PATH = Path("./Semantic_analysis(2020-12-07_FlickrInstagram_random1M/??????????????????????????????.csv")
+    FLICKR_RANDOM_PATH = Path("./Semantic_analysis/2021-02-02_InstagramFlickr_random5m_userterms_country/flickr_random5m_userterms_countries_grouped.csv")
+    FLICKR_RANDOM_LOCATIONREF_PATH = Path("./Semantic_analysis/2020-12-07_FlickrInstagram_random1M/??????????????????????????????.csv")
     if MODE == 'SUNSET':
         # spatial reference to unique userday hashaes. columns: userday, xbin, ybin, su_a3 (country code)
         FLICKR_LOCATIONREF_PATH = Path("./Semantic_analysis/Flickr_userday_location_ref/flickr_sunset_userday_gridloc.csv")
         # actual sunset/sunrise data. columns: userday, userday_terms, userday_season_id (Multiple/Ambiguous 0, Northern spring 1, Northern summer 2, Northern fall 3, Northern winter 4, Southern spring -1, Southern summer -2, Southern fall -3, Southern winter -4
         FLICKR_PATH = Path("./Semantic_analysis/2021-01-28_country_userterms/flickr_sunset_terms_user_country.csv") # CHANGE HERE IF NECESSARY
         # OUTPUT store path
-        TF_IDF_FLICKR_STORE_PATH = Path("./Semantic_analysis/20210201_FLICKR_SUNSET_country_tf_idf.csv") # CHANGE HERE IF NECESSARY
+        TF_IDF_FLICKR_STORE_PATH = Path("./Semantic_analysis/20210204_FLICKR_SUNSET_country_tf_idf.csv") # CHANGE HERE IF NECESSARY
 
     elif MODE == 'SUNRISE':
         # spatial reference to unique userday hashaes. columns: userday, xbin, ybin, su_a3 (country code)
@@ -65,15 +66,15 @@ elif SOURCE == 'INSTAGRAM':
 def load_data():
     print('loading data...')
     if BASE_DOCUMENT_FREQUENCY_RANDOM:
-        flickr_random_1m_df = pd.read_csv(FLICKR_RANDOM1M_PATH, encoding='utf-8')
-        flickr_random_1m_locationref_df = pd.read_csv(FLICKR_RANDOM1M_LOCATIONREF_PATH, encoding='utf-8')
+        flickr_random_df = pd.read_csv(FLICKR_RANDOM_PATH, encoding='utf-8')
+        flickr_random_locationref_df = pd.read_csv(FLICKR_RANDOM_LOCATIONREF_PATH, encoding='utf-8')
         # merge dataframes basde on userday hash
-        flickr_random_1m_w_locationref_df = flickr_random_1m_df.merge(flickr_random_1m_locationref_df, how='left', on='userday')
+        flickr_random_w_locationref_df = flickr_random_df.merge(flickr_random_locationref_df, how='left', on='userday')
         # 1.2 retrieve unique country codes for iteration
-        country_codes = flickr_random_1m_w_locationref_df['su_a3'].unique()
+        country_codes = flickr_random_w_locationref_df['su_a3'].unique()
         # remove nan country codes from array (issues with further processing) - index value 17
         ###country_codes = np.delete(country_codes, 17)
-        return flickr_random_1m_w_locationref_df, country_codes
+        return flickr_random_w_locationref_df, country_codes
     else:
         flickr_df = pd.read_csv(FLICKR_PATH, encoding='utf-8')
         if not LOCATION_PRESENT:

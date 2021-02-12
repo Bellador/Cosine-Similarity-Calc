@@ -1,4 +1,5 @@
 # import dependencies
+import time
 import math
 import pickle
 import numpy as np
@@ -17,45 +18,53 @@ PROCESSING STEPS (do everything for flickr sunset first - testing)
 1.3 calculate cosine similarity for flickr_sunset between countries
 1.n calculate userdays per country
 '''
+# define if term frequency is calculated using all available cores
+MULTIPROCESSING = True
 # define which phenomenon is analysed
 MODE = 'SUNSET' #OR SUNRISE
 SOURCE = 'FLICKR' # OR INSTAGRAM OR ALL
 # min. amount of unique userposts a country must have to be included in the processing
 THRESHOLD = 25
-# if location (country code) is already present (true) in flickr dataset the merge with a location dataset can be skipped
-LOCATION_PRESENT = True
-if LOCATION_PRESENT:
-    # define search col where the flickr terms are found
-    term_col = 'user_terms'
-else:
-    term_col = 'userday_terms'
+# define search col where the flickr terms are found
+term_col = 'user_terms'
 
 if SOURCE == 'FLICKR':
-    # random sample is used to build the entire vocabulary for tf-idf. columns: userday, userday_terms, userday_season_id
-    FLICKR_RANDOM1M_PATH = Path("./Semantic_analysis(2020-12-07_FlickrInstagram_random1M/flickr_random1m_terms_geotagged_grouped.csv")
+    if MODE == 'SUNSET':
+        # actual sunset/sunrise data. columns: userday, userday_terms, userday_season_id (Multiple/Ambiguous 0, Northern spring 1, Northern summer 2, Northern fall 3, Northern winter 4, Southern spring -1, Southern summer -2, Southern fall -3, Southern winter -4
+        DATA_PATH = Path("./Semantic_analysis/2021-01-28_country_userterms/flickr_sunset_terms_user_country.csv") # CHANGE HERE IF NECESSARY
+        # OUTPUT store path
+        COSINE_SIMILARITY_STORE_PATH = Path("./Semantic_analysis/20210204_FLICKR_SUNSET_random_country_cosine_similarity.csv") # CHANGE HERE IF NECESSARY
+        # STORE PATH FOR INTERMEDIATE PRODUCT - CALCULATED TERMS PER COUNTRY FLICKR POSTS (country_term_dict)
+        COUNTRY_TERM_DICT_STORE_PATH = Path("./Semantic_analysis/20210204_FLICKR_SUNSET_country_term_dict.pickle")
+
+    elif MODE == 'SUNRISE':
+        # actual sunset/sunrise data. columns: userday, userday_terms, userday_season_id (Multiple/Ambiguous 0, Northern spring 1, Northern summer 2, Northern fall 3, Northern winter 4, Southern spring -1, Southern summer -2, Southern fall -3, Southern winter -4
+        DATA_PATH = Path("./Semantic_analysis/Flickr_userday_terms_raw/flickr_sunrise_terms_geotagged_grouped.csv")
+        # OUTPUT store path
+        COSINE_SIMILARITY_STORE_PATH = Path("./Semantic_analysis/20210202_FLICKR_SUNRISE_country_cosine_similarity.csv")
+        # STORE PATH FOR INTERMEDIATE PRODUCT - CALCULATED TERMS PER COUNTRY FLICKR POSTS (country_term_dict)
+        COUNTRY_TERM_DICT_STORE_PATH = Path("./Semantic_analysis/20210202_FLICKR_SUNRISE_country_term_dict.pickle")
+
+elif SOURCE == 'INSTAGRAM':
     if MODE == 'SUNSET':
         # spatial reference to unique userday hashaes. columns: userday, xbin, ybin, su_a3 (country code)
-        FLICKR_LOCATIONREF_PATH = Path("./Semantic_analysis/Flickr_userday_location_ref/flickr_sunset_userday_gridloc.csv")
+        # LOCATIONREF_PATH = Path("./Semantic_analysis/Flickr_userday_location_ref/flickr_sunset_userday_gridloc.csv")
         # actual sunset/sunrise data. columns: userday, userday_terms, userday_season_id (Multiple/Ambiguous 0, Northern spring 1, Northern summer 2, Northern fall 3, Northern winter 4, Southern spring -1, Southern summer -2, Southern fall -3, Southern winter -4
-        # FLICKR_PATH = Path("./Semantic_analysis/Flickr_userday_terms_raw/flickr_sunset_terms_geotagged_grouped.csv")
-        FLICKR_PATH = Path("./Semantic_analysis/2021-01-28_country_userterms/flickr_sunset_terms_user_country.csv") # CHANGE HERE IF NECESSARY
-        # cosine similarity store path
-        COSINE_SIMILARITY_STORE_PATH = Path("./Semantic_analysis/20210129_FLICKR_SUNSET_country_cosine_similarities.csv") # CHANGE HERE IF NECESSARY
+        DATA_PATH = Path("./Semantic_analysis/2021-01-28_country_userterms/instagram_sunset_terms_user_country.csv")  # CHANGE HERE IF NECESSARY
+        # OUTPUT store path
+        COSINE_SIMILARITY_STORE_PATH = Path("./Semantic_analysis/20210204_INSTAGRAM_SUNSET_random_country_cosine_similarity.csv")  # CHANGE HERE IF NECESSARY
         # STORE PATH FOR INTERMEDIATE PRODUCT - CALCULATED TERMS PER COUNTRY FLICKR POSTS (country_term_dict)
-        COUNTRY_TERM_DICT_STORE_PATH = Path("./Semantic_analysis/20210129_FLICKR_SUNSET_country_term_dict.pickle") # CHANGE HERE IF NECESSARY
+        COUNTRY_TERM_DICT_STORE_PATH = Path("./Semantic_analysis/20210204_INSTAGRAM_SUNRSET_country_term_dict.pickle")
 
     elif MODE == 'SUNRISE':
         # spatial reference to unique userday hashaes. columns: userday, xbin, ybin, su_a3 (country code)
-        FLICKR_LOCATIONREF_PATH = Path("./Semantic_analysis/Flickr_userday_location_ref/flickr_sunrise_userday_gridloc.csv")
+        # LOCATIONREF_PATH = Path("./Semantic_analysis/Flickr_userday_location_ref/flickr_sunrise_userday_gridloc.csv")
         # actual sunset/sunrise data. columns: userday, userday_terms, userday_season_id (Multiple/Ambiguous 0, Northern spring 1, Northern summer 2, Northern fall 3, Northern winter 4, Southern spring -1, Southern summer -2, Southern fall -3, Southern winter -4
-        FLICKR_PATH = Path("./Semantic_analysis/Flickr_userday_terms_raw/flickr_sunrise_terms_geotagged_grouped.csv")
-        # cosine similarity store path
-        COSINE_SIMILARITY_STORE_PATH = Path("./Semantic_analysis/FLICKR_SUNRISE_country_cosine_similarities.csv")
+        DATA_PATH = Path("./Semantic_analysis/2021-01-28_country_userterms/instagram_sunrise_terms_user_country.csv")
+        # OUTPUT store path
+        COSINE_SIMILARITY_STORE_PATH = Path("./Semantic_analysis/20210204_INSTAGRAM_SUNRISE_country_cosine_similarity.csv")
         # STORE PATH FOR INTERMEDIATE PRODUCT - CALCULATED TERMS PER COUNTRY FLICKR POSTS (country_term_dict)
-        COUNTRY_TERM_DICT_STORE_PATH = Path("./Semantic_analysis/FLICKR_SUNRISE_country_term_dict.pickle")
-
-elif SOURCE == 'INSTAGRAM':
-    INSTAGRAM_RANDOM1M_PATH = Path("./Semantic_analysis/2020-12-07_FlickrInstagram_random1M/instagram_random1m_terms_geotagged_grouped.csv")
+        COUNTRY_TERM_DICT_STORE_PATH = Path("./Semantic_analysis/20210204_INSTAGRAM_SUNRISE_country_term_dict.pickle")
 
 def calc_vocabulary():
     '''
@@ -64,32 +73,30 @@ def calc_vocabulary():
     # 1.1
     # load data, use 'converters={'column_name': eval}' to evaluate the columns to their designated object. Because dataframe
     # was saved as CSV, therefore text, a stored list or series must be converted back otherwise it will appear as string
-    flickr_sunset_df = pd.read_csv(FLICKR_PATH)
-    if not LOCATION_PRESENT:
-        flickr_locationref_sunset_df = pd.read_csv(FLICKR_LOCATIONREF_PATH)
-        # merge dataframes basde on userday hash
-        flickr_sunset_w_locationref_df = flickr_sunset_df.merge(flickr_locationref_sunset_df, how='left', on='userday')
-    else:
-        flickr_sunset_w_locationref_df = flickr_sunset_df
+    data_w_locationref_df = pd.read_csv(DATA_PATH)
     # 1.2 retrieve unique country codes for iteration
-    country_codes = flickr_sunset_w_locationref_df['su_a3'].unique()
-    # remove nan country codes from array (issues with further processing) - index value 17
-    if not LOCATION_PRESENT:
-        country_codes = np.delete(country_codes, 17)
+    country_codes = data_w_locationref_df['su_a3'].unique()
     # create dict that holds the terms for all posts inside one country based on which cosine similarity will be calcualted
     country_term_dict = {}
-    print(f'column dtypes: {flickr_sunset_w_locationref_df.dtypes}')
+    print(f'column dtypes: {data_w_locationref_df.dtypes}')
     print('preprosses userday terms...')
-    flickr_sunset_w_locationref_df[term_col] = flickr_sunset_w_locationref_df[term_col].apply(lambda x: x.strip('{}'))
+    data_w_locationref_df[term_col] = data_w_locationref_df[term_col].apply(lambda x: x.strip('{}'))
     print('build entire corpus vocabulary (set)...')
-    corpus_vocabulary_str = ','.join(flickr_sunset_w_locationref_df[term_col])
-    # convert to set for unique values and then back to access the index function later on
-    corpus_vocabulary_set = list(set(corpus_vocabulary_str.split(',')))
-    corpus_vocabulary_set_len = len(corpus_vocabulary_set)
-    print(f'len corpus vocabulary (set): {corpus_vocabulary_set_len}')
+    corpus_vocabulary_str = ','.join(data_w_locationref_df[term_col])
+    # convert to set for unique values and then back to chararray for access the index function later on
+    corpus_unique_vocabulary_array = list(set(corpus_vocabulary_str.split(',')))
+    corpus_unique_voc_array_len = len(corpus_unique_vocabulary_array)
+    print(f'len corpus vocabulary (set): {corpus_unique_voc_array_len}')
+    print(f'create dict of corpus vocabulary that associates the term index in the array with the term itself...')
+    corpus_vocabulary_index_dict = {}
+    start = time.time()
+    for index, term in enumerate(corpus_unique_vocabulary_array):
+        corpus_vocabulary_index_dict[term] = index
+    end = time.time()
+    print(f'time diff: {round(end - start)}s')
     print(f'build vocabulary for all countries with min. {THRESHOLD} unique userposts...')
     for country_index, country_code in enumerate(country_codes):
-        country_df = flickr_sunset_w_locationref_df[flickr_sunset_w_locationref_df['su_a3'] == country_code]
+        country_df = data_w_locationref_df[data_w_locationref_df['su_a3'] == country_code]
         # check if len of subdf: country_df is higher than or equal the threhold
         if len(country_df.index.values) >= THRESHOLD:
             # # 1.n calculate unique userdays per country and display
@@ -110,10 +117,10 @@ def calc_vocabulary():
     # create dataframe which holds cosine similarities between countries
     countries_cosine_similarity_df = pd.DataFrame(index=country_codes, columns=country_codes)
 
-    return country_term_dict, corpus_vocabulary_set, corpus_vocabulary_set_len, country_codes, countries_cosine_similarity_df
+    return country_term_dict, corpus_unique_vocabulary_array, corpus_unique_voc_array_len, corpus_vocabulary_index_dict, country_codes, countries_cosine_similarity_df
 
 
-def calc_term_vector(country_term_dict, corpus_vocabulary_set, corpus_vocabulary_set_len, country_codes, tracker=1):
+def calc_term_vector(country_term_dict, corpus_vocabulary_set, corpus_vocabulary_set_len, corpus_vocabulary_index_dict, country_codes, tracker=1):
     # create dict that holds the terms_VECTORES for all post
     country_vector_dict = {}
     # create the vector of all posts based on the overall corpus vocabulary
@@ -127,10 +134,11 @@ def calc_term_vector(country_term_dict, corpus_vocabulary_set, corpus_vocabulary
         country_terms_len = len(country_terms_counter.keys())
         for index2, (term, frequency) in enumerate(country_terms_counter.items()):
             print(f'\r{index2} of {country_terms_len}', end='')
-            # find index of term in entire vocabulary coprus
-            vocabulary_termindex = corpus_vocabulary_set.index(term)
+            # find index of term in entire vocabulary corpus
+            corpus_vocabulary_term_index = corpus_vocabulary_index_dict[term]
+            #corpus_vocabulary_term_index = corpus_vocabulary_set.index(term) # its actually not a set, but a list of unique items
             # replace 0 at given index with frequency of Counter object for given term
-            country_vector[vocabulary_termindex] = frequency
+            country_vector[corpus_vocabulary_term_index] = frequency
         # convert to numpy array
         country_vector = np.array(country_vector)
         # reshape the vector to fit the sklearn cosine similarity function
@@ -164,9 +172,8 @@ def calc_cosine_similarity(country_vector_dict, countries_cosine_similarity_df):
 
 
 if __name__ == '__main__':
-    print(f'starting process on {cpu_count()} cores...')
     # cosine_similarity dict is still empty here, was only initialised
-    country_term_dict, corpus_vocabulary_set, corpus_vocabulary_set_len, country_codes, countries_cosine_similarity_df = calc_vocabulary()
+    country_term_dict, corpus_vocabulary_set, corpus_vocabulary_set_len, corpus_vocabulary_index_dict, country_codes, countries_cosine_similarity_df = calc_vocabulary()
     # dump country_term_dict as pickl format
     try:
         with open(COUNTRY_TERM_DICT_STORE_PATH, 'wb') as handle:
@@ -175,26 +182,32 @@ if __name__ == '__main__':
         print(f'Error: {e}')
         print('Could not pickle country_term_dict...')
         print('Continuing...')
-    # distribute work over cores based on country_code splits
-    nr_country_codes_per_process = math.ceil(len(country_codes) / cpu_count())
-    arguments = []
-    # prepare arguments for processes
-    for i in range(cpu_count()):
-        # number to track process in print statements
-        tracker = i + 1
-        # if last process take the remaining rest
-        if i == (cpu_count()-1):
-            country_codes_process_share = country_codes[(i * nr_country_codes_per_process):]
-        else:
-            country_codes_process_share = country_codes[(i*nr_country_codes_per_process):((i+1)*nr_country_codes_per_process)]
-        arguments.append((country_term_dict, corpus_vocabulary_set, corpus_vocabulary_set_len, country_codes_process_share, tracker))
-    # convert to tuple
-    arguments = tuple(arguments)
-    with Pool() as pool:
-        country_vector_dict_list = pool.starmap(calc_term_vector, arguments)
-    # merge dictionaries that were generated by the different processes
-    country_vector_dict = {}
-    for dict_ in country_vector_dict_list:
-        country_vector_dict.update(dict_)
+    if MULTIPROCESSING:
+        print(f'starting process on {cpu_count()} cores...')
+        # distribute work over cores based on country_code splits
+        nr_country_codes_per_process = math.ceil(len(country_codes) / cpu_count())
+        arguments = []
+        # prepare arguments for processes
+        for i in range(cpu_count()):
+            # number to track process in print statements
+            tracker = i + 1
+            # if last process take the remaining rest
+            if i == (cpu_count()-1):
+                country_codes_process_share = country_codes[(i * nr_country_codes_per_process):]
+            else:
+                country_codes_process_share = country_codes[(i*nr_country_codes_per_process):((i+1)*nr_country_codes_per_process)]
+            arguments.append((country_term_dict, corpus_vocabulary_set, corpus_vocabulary_set_len, corpus_vocabulary_index_dict, country_codes_process_share, tracker))
+        # convert to tuple
+        arguments = tuple(arguments)
+        with Pool() as pool:
+            country_vector_dict_list = pool.starmap(calc_term_vector, arguments)
+        # merge dictionaries that were generated by the different processes
+        country_vector_dict = {}
+        for dict_ in country_vector_dict_list:
+            country_vector_dict.update(dict_)
+    # no multiprocessing
+    else:
+        country_vector_dict = calc_term_vector(country_term_dict, corpus_vocabulary_set, corpus_vocabulary_set_len, corpus_vocabulary_index_dict, country_codes)
     # compute the cosine similarity between all country specific term vectors
     countries_cosine_similarity_df = calc_cosine_similarity(country_vector_dict, countries_cosine_similarity_df)
+    print('done.')
